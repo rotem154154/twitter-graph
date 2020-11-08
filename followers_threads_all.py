@@ -1,34 +1,29 @@
-import os
-import json
+
 import threading
 from random import shuffle
 
-import botometer
 import pandas
 import requests
-import tweepy
 import time
-from subprocess import call
-from tqdm import tqdm
 from hyperdash import Experiment
 import subprocess
-import pickle
 import rotem_helpers
-import _thread
 from time import gmtime, strftime
+from pathlib import Path
 
 import more_itertools as mit
 import sys
-from work.parts import ezers
 
-exp = Experiment("follow_threads2.1")
+
+first_user = 'Alon_Sela'
+# first_user = False
+
 uf_file = '12-10-15-18-44.pkl'
 q_file = '12-10-15-03-11.pkl'
-vars_dir = '/Users/rotemisraeli/Documents/python/work/parts/vars2/'
+vars_dir = 'vars/'
 
-# if in uf layer = 1 dont change it
-
-# followers_per_user = 10000
+layer_download = 1
+exp = Experiment("follow_threads2.1")
 version = 12 # will be append to file
 n_t = 128 # number of threads
 nums = 100000
@@ -37,6 +32,9 @@ q_in_use = False
 q = []
 all_qs = []
 users_follow = {}
+# users_follow = {'BDSmovement':{'followes':[..],'layer':0},
+#                   'elon_musk':{'followers':[...],'....}
+
 
 def main():
     global all_qs
@@ -51,15 +49,16 @@ def main():
 
     treads = []
     print(len(users_follow),'gggggg')
+    if first_user:
+        new_follow(0,q)
+    else:
+        for thread_num in range(n_t):
+            x = threading.Thread(target=new_follow, args=(thread_num,all_qs[thread_num],))
+            treads.append(x)
+            x.start()
 
-
-    for thread_num in range(n_t):
-        x = threading.Thread(target=new_follow, args=(thread_num,all_qs[thread_num],))
-        treads.append(x)
-        x.start()
-
-    for t in treads:
-        t.join()
+        for t in treads:
+            t.join()
 
     exp.end()
 
@@ -79,10 +78,16 @@ def get_num_followers(user):
 
 
 def load_vars():
-    global q, users_follow
-    q = rotem_helpers.load_obj('vars2/q2/'+q_file)
-    # q = [['BDSmovement',0]]
-    users_follow = rotem_helpers.load_obj('vars2/uf2/'+uf_file)
+    global q, users_follow,layer_download,n_t
+    Path(vars_dir + 'q/').mkdir(parents=True, exist_ok=True)
+    Path(vars_dir + 'uf/').mkdir(parents=True, exist_ok=True)
+    if first_user:
+        q = [['BDSmovement',0]]
+        layer_download = 0
+        n_t = 1
+    else:
+        q = rotem_helpers.load_obj(vars_dir + 'q/'+q_file)
+        users_follow = rotem_helpers.load_obj(vars_dir + 'uf/'+uf_file)
 
 
 def user_friends(username, followers_or_following):
@@ -124,11 +129,12 @@ def new_follow(thread_num,thread_q):
             current_user,dist = thread_q.pop(0)
             # print(current_user,dist)
             i += 1
-            if dist == 1:
+            if dist == layer_download:
                 if True or not current_user in users_follow:
                     exp.metric(str(thread_num),count)
                     count+=1
                     followers = user_friends(current_user, 'followers')
+
                     followers2 = []
                     for folo in followers:
                         while q_in_use:
@@ -164,16 +170,16 @@ def new_follow(thread_num,thread_q):
                                     #     q_to_save.extend(qs_mini)
                                     #
                                     # rotem_helpers.save_obj(q_to_save, vars_dir + 'q2/' + file_name)
-                                    rotem_helpers.save_obj(users_follow, vars_dir + 'uf2/' + file_name)
+                                    rotem_helpers.save_obj(users_follow, vars_dir + 'uf/' + file_name)
                                     q_in_use = False
                                     worked = True
                                 except:
                                     time.sleep(5)
         except Exception as e:
             if str(e) == 'pop from empty list':
-                print('fffffffffff')
-                rotem_helpers.save_obj(q, vars_dir + 'q2/' + str(len(q)) + '.pkl')
-                rotem_helpers.save_obj(users_follow, vars_dir + 'uf2/' + str(len(users_follow)) + '.pkl')
+                print(thread_q)
+                rotem_helpers.save_obj(q, vars_dir + 'q/' + str(len(q)) + '.pkl')
+                rotem_helpers.save_obj(users_follow, vars_dir + 'uf/' + str(len(users_follow)) + '.pkl')
                 sys.exit(0)
             time.sleep(10)
             print('ooo',thread_num,e)
